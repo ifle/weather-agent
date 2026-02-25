@@ -13,8 +13,6 @@ from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from langchain_litellm import ChatLiteLLM
 from langgraph.graph import START, END, MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import stdio_client
 
 from tools.weather_forecast import weather_forecast
 
@@ -30,20 +28,19 @@ MCP_SERVER_URL = os.getenv(
 SYSTEM_PROMPT = f"""You are a helpful AI assistant that helps users plan business trips by combining business partner information with weather forecasts.
 
 Your capabilities:
-1. Look up business partners from the Ariba MCP server at: {MCP_SERVER_URL}
+1. Look up business partners from the Ariba MCP server (configured in the system)
 2. Retrieve weather forecasts for any location
 3. Combine partner data with weather information to provide integrated trip planning insights
 
-You have access to MCP (Model Context Protocol) tools from the Ariba server. When a user asks about a business partner:
-1. Use the MCP tools to search for and retrieve business partner information
+The Ariba MCP server is available and provides tools for searching and retrieving business partner data.
+When a user asks about a business partner:
+1. Use the available MCP tools to search for and retrieve business partner information
 2. Extract the location (city, country) from the partner data
 3. Use the weather forecast tool to get weather for that location
 4. Provide a comprehensive response combining both
 
 Be conversational, friendly, and provide actionable travel advice based on weather conditions.
-For example, if there's high chance of rain, suggest packing an umbrella.
-
-The Ariba MCP server provides tools for searching and retrieving business partner data. Use these tools directly."""
+For example, if there's high chance of rain, suggest packing an umbrella."""
 
 
 @dataclass
@@ -57,7 +54,7 @@ class WeatherAgent:
     Weather Agent with LangGraph-based orchestration.
     
     Integrates with:
-    - Ariba MCP server: For business partner lookup
+    - Ariba MCP server: For business partner lookup (via App Foundation MCP integration)
     - Weather API: For weather forecasts
     """
     
@@ -66,40 +63,11 @@ class WeatherAgent:
     
     def __init__(self):
         self.llm = ChatLiteLLM(model="sap/anthropic--claude-4.5-sonnet")
-        self.mcp_session = None
+        # MCP tools are automatically available via App Foundation's mcpServers configuration
+        # The LLM will have access to them through the runtime
         self.tools = [weather_forecast]
         self.graph = self._build_graph()
-        logger.info(f"WeatherAgent initialized with Ariba MCP integration at {MCP_SERVER_URL}")
-    
-    async def _get_mcp_tools(self):
-        """
-        Get tools from the Ariba MCP server.
-        
-        Returns:
-            List of MCP tools available from the server
-        """
-        if self.mcp_session is None:
-            # Initialize MCP client session
-            # Note: This connects to the MCP server and retrieves available tools
-            try:
-                server_params = StdioServerParameters(
-                    command="npx",
-                    args=["-y", "@modelcontextprotocol/server-fetch", MCP_SERVER_URL],
-                )
-                
-                async with stdio_client(server_params) as (read, write):
-                    async with ClientSession(read, write) as session:
-                        await session.initialize()
-                        
-                        # List available tools
-                        tools_result = await session.list_tools()
-                        self.mcp_session = session
-                        return tools_result.tools
-            except Exception as e:
-                logger.error(f"Failed to connect to MCP server: {e}")
-                return []
-        
-        return []
+        logger.info(f"WeatherAgent initialized with MCP integration (server configured in app.yaml)")
     
     def _build_graph(self):
         """
@@ -107,9 +75,12 @@ class WeatherAgent:
         
         Graph flow:
         START -> model -> [tools if needed] -> model -> END
+        
+        Note: MCP tools from the Ariba server are automatically available to the LLM
+        through App Foundation's MCP integration configured in app.yaml.
         """
         # Bind tools to the LLM
-        # Note: MCP tools will be added dynamically at runtime
+        # App Foundation runtime will inject MCP tools automatically
         llm_with_tools = self.llm.bind_tools(self.tools)
         
         def call_model(state: MessagesState):
