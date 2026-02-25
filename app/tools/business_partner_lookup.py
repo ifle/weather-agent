@@ -1,61 +1,70 @@
 """Business Partner Lookup Tool
 
-This tool searches for business partners by name using fuzzy matching.
-Uses mock data for development (to be replaced with real S/4HANA OData integration).
+This tool searches for business partners using the Ariba MCP server.
+Connects to the MCP server to retrieve real business partner data.
 """
 
+import os
+import httpx
 from typing import Optional
 from langchain_core.tools import tool
 
-# Mock business partner data with diverse global locations
-MOCK_PARTNERS = [
-    {"id": "BP001", "name": "Acme Corp", "city": "New York", "country": "USA"},
-    {"id": "BP002", "name": "TechVentures GmbH", "city": "Berlin", "country": "Germany"},
-    {"id": "BP003", "name": "Global Innovations Ltd", "city": "London", "country": "UK"},
-    {"id": "BP004", "name": "Pacific Solutions", "city": "Tokyo", "country": "Japan"},
-    {"id": "BP005", "name": "Nordic Systems AB", "city": "Stockholm", "country": "Sweden"},
-    {"id": "BP006", "name": "Alpine Technologies SA", "city": "Zurich", "country": "Switzerland"},
-    {"id": "BP007", "name": "Southern Cross Enterprises", "city": "Sydney", "country": "Australia"},
-    {"id": "BP008", "name": "Maple Leaf Industries", "city": "Toronto", "country": "Canada"},
-    {"id": "BP009", "name": "Dragon Tech Co", "city": "Shanghai", "country": "China"},
-    {"id": "BP010", "name": "Sunset Digital", "city": "San Francisco", "country": "USA"},
-]
+# MCP Server configuration
+MCP_SERVER_URL = os.getenv(
+    "ARIBA_MCP_SERVER_URL", 
+    "https://mcp-server-demo-igor-dev.c-127c9ef.stage.kyma.ondemand.com/mcp/ariba"
+)
 
 
-def search_business_partner(partner_name: str) -> Optional[dict]:
+async def search_business_partner_mcp(partner_name: str) -> Optional[dict]:
     """
-    Search for a business partner by name using fuzzy matching.
+    Search for a business partner using the Ariba MCP server.
     
     Args:
         partner_name: Name or partial name of the business partner to search for
         
     Returns:
-        Dictionary with partner info (id, name, city, country) or None if not found
+        Dictionary with partner info or None if not found
     """
     if not partner_name:
         return None
     
-    # Normalize search term (lowercase, strip whitespace)
-    search_term = partner_name.lower().strip()
-    
-    # Try exact match first (case-insensitive)
-    for partner in MOCK_PARTNERS:
-        if partner["name"].lower() == search_term:
-            return partner
-    
-    # Try partial match (case-insensitive)
-    for partner in MOCK_PARTNERS:
-        if search_term in partner["name"].lower():
-            return partner
-    
-    # No match found
-    return None
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            # Call the MCP server to search for business partners
+            response = await client.post(
+                f"{MCP_SERVER_URL}/search",
+                json={
+                    "query": partner_name,
+                    "limit": 1
+                },
+                headers={"Content-Type": "application/json"}
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data and len(data) > 0:
+                    partner = data[0]
+                    # Extract relevant fields
+                    return {
+                        "id": partner.get("id", ""),
+                        "name": partner.get("name", ""),
+                        "city": partner.get("city", ""),
+                        "country": partner.get("country", "")
+                    }
+            
+            return None
+            
+    except Exception as e:
+        # Log error but don't fail - return None to indicate not found
+        print(f"Error searching MCP server: {e}")
+        return None
 
 
 @tool
-def business_partner_lookup(partner_name: str) -> str:
+async def business_partner_lookup(partner_name: str) -> str:
     """
-    Look up a business partner by name and return their location information.
+    Look up a business partner by name using the Ariba MCP server and return their location information.
     
     Use this tool when the user asks about a business partner's location or
     wants to get weather information for a partner's location.
@@ -66,7 +75,7 @@ def business_partner_lookup(partner_name: str) -> str:
     Returns:
         A string describing the partner's location, or an error message if not found
     """
-    partner = search_business_partner(partner_name)
+    partner = await search_business_partner_mcp(partner_name)
     
     if partner:
         return (
@@ -74,21 +83,7 @@ def business_partner_lookup(partner_name: str) -> str:
             f"Location: {partner['city']}, {partner['country']}"
         )
     else:
-        # Suggest alternatives by showing similar names
-        suggestions = []
-        search_term = partner_name.lower().strip()
-        for p in MOCK_PARTNERS:
-            # Find partners that share at least one word
-            if any(word in p["name"].lower() for word in search_term.split()):
-                suggestions.append(p["name"])
-        
-        if suggestions:
-            return (
-                f"Business partner '{partner_name}' not found. "
-                f"Did you mean one of these? {', '.join(suggestions[:3])}"
-            )
-        else:
-            return (
-                f"Business partner '{partner_name}' not found. "
-                f"Please check the spelling or try a different name."
-            )
+        return (
+            f"Business partner '{partner_name}' not found in the Ariba system. "
+            f"Please check the spelling or try a different name."
+        )

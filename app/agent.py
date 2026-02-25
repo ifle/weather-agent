@@ -14,7 +14,7 @@ from langchain_litellm import ChatLiteLLM
 from langgraph.graph import START, END, MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode
 
-from tools.business_partner_lookup import business_partner_lookup, search_business_partner
+from tools.business_partner_lookup import business_partner_lookup
 from tools.weather_forecast import weather_forecast
 
 logging.basicConfig(level=logging.INFO)
@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 SYSTEM_PROMPT = """You are a helpful AI assistant that helps users plan business trips by combining business partner information with weather forecasts.
 
 Your capabilities:
-1. Look up business partners by name and find their locations
+1. Look up business partners by name from the Ariba system and find their locations
 2. Retrieve weather forecasts for any location
 3. Combine partner data with weather information to provide integrated trip planning insights
 
@@ -35,7 +35,7 @@ When a user asks about weather for a partner visit:
 Be conversational, friendly, and provide actionable travel advice based on weather conditions.
 For example, if there's high chance of rain, suggest packing an umbrella.
 
-Remember: You have access to tools for business partner lookup and weather forecasts. Use them to provide accurate, helpful information."""
+Remember: You have access to tools for business partner lookup (from Ariba MCP server) and weather forecasts. Use them to provide accurate, helpful information."""
 
 
 @dataclass
@@ -49,7 +49,7 @@ class WeatherAgent:
     Weather Agent with LangGraph-based orchestration.
     
     Uses two tools:
-    - business_partner_lookup: Search for business partners
+    - business_partner_lookup: Search for business partners via Ariba MCP server
     - weather_forecast: Get weather forecasts
     """
     
@@ -60,7 +60,7 @@ class WeatherAgent:
         self.llm = ChatLiteLLM(model="sap/anthropic--claude-4.5-sonnet")
         self.tools = [business_partner_lookup, weather_forecast]
         self.graph = self._build_graph()
-        logger.info("WeatherAgent initialized with LangGraph")
+        logger.info("WeatherAgent initialized with LangGraph and Ariba MCP integration")
     
     def _build_graph(self):
         """
