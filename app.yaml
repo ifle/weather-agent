@@ -22,3 +22,6 @@ spec:
   - executableId: aws-bedrock
     name: anthropic--claude-4.5-sonnet
     version: latest
+  mcpServers:
+  - name: ariba
+    url: https://mcp-server-demo-igor-dev.c-127c9ef.stage.kyma.ondemand.com/mcp/ariba

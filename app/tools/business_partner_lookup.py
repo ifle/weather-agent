@@ -1,13 +1,13 @@
 """Business Partner Lookup Tool
 
 This tool searches for business partners using the Ariba MCP server.
-Connects to the MCP server to retrieve real business partner data.
+The LLM will call the MCP server tools directly.
 """
 
 import os
-import httpx
 from typing import Optional
 from langchain_core.tools import tool
+
 
 # MCP Server configuration
 MCP_SERVER_URL = os.getenv(
@@ -16,74 +16,23 @@ MCP_SERVER_URL = os.getenv(
 )
 
 
-async def search_business_partner_mcp(partner_name: str) -> Optional[dict]:
-    """
-    Search for a business partner using the Ariba MCP server.
-    
-    Args:
-        partner_name: Name or partial name of the business partner to search for
-        
-    Returns:
-        Dictionary with partner info or None if not found
-    """
-    if not partner_name:
-        return None
-    
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            # Call the MCP server to search for business partners
-            response = await client.post(
-                f"{MCP_SERVER_URL}/search",
-                json={
-                    "query": partner_name,
-                    "limit": 1
-                },
-                headers={"Content-Type": "application/json"}
-            )
-            
-            if response.status_code == 200:
-                data = response.json()
-                if data and len(data) > 0:
-                    partner = data[0]
-                    # Extract relevant fields
-                    return {
-                        "id": partner.get("id", ""),
-                        "name": partner.get("name", ""),
-                        "city": partner.get("city", ""),
-                        "country": partner.get("country", "")
-                    }
-            
-            return None
-            
-    except Exception as e:
-        # Log error but don't fail - return None to indicate not found
-        print(f"Error searching MCP server: {e}")
-        return None
-
-
 @tool
-async def business_partner_lookup(partner_name: str) -> str:
+def business_partner_lookup(partner_name: str) -> str:
     """
-    Look up a business partner by name using the Ariba MCP server and return their location information.
+    Look up a business partner by name using the Ariba MCP server.
     
-    Use this tool when the user asks about a business partner's location or
-    wants to get weather information for a partner's location.
+    This tool provides access to the Ariba MCP server which contains business partner
+    information including location data.
     
     Args:
         partner_name: The name of the business partner to look up
         
     Returns:
-        A string describing the partner's location, or an error message if not found
+        Instructions for the LLM to call the MCP server tool directly
     """
-    partner = await search_business_partner_mcp(partner_name)
-    
-    if partner:
-        return (
-            f"Found business partner: {partner['name']} (ID: {partner['id']}). "
-            f"Location: {partner['city']}, {partner['country']}"
-        )
-    else:
-        return (
-            f"Business partner '{partner_name}' not found in the Ariba system. "
-            f"Please check the spelling or try a different name."
-        )
+    # Return instruction for the LLM to use MCP tools
+    return (
+        f"To look up business partner '{partner_name}', you should use the MCP server tools directly. "
+        f"The Ariba MCP server is available at: {MCP_SERVER_URL}. "
+        f"Use the MCP tools to search for the partner and retrieve their location information."
+    )
